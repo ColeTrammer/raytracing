@@ -16,7 +16,9 @@ use material::Metal;
 use rand::thread_rng;
 use rand::Rng;
 use ray::Ray;
+use rayon::prelude::*;
 use sphere::Sphere;
+use std::sync::atomic;
 use vec3::Color;
 use vec3::Point3;
 use vec3::Vec3;
@@ -58,15 +60,10 @@ fn ray_color(initial_ray: &Ray, world: &dyn Hittable, max_depth: i32) -> Color {
     Color::zero()
 }
 
-// fn random_scene() -> HittableList {
-
-//     world
-// }
-
 fn main() {
     // Image
     let aspect_ratio = 3.0 / 2.0;
-    let image_width = 400;
+    let image_width = 1200;
     let image_height = (image_width as f64 / aspect_ratio) as i32;
     let samples_per_pixel = 500;
     let max_depth = 50;
@@ -80,7 +77,7 @@ fn main() {
 
     let mut materials = vec![];
     for _ in -11..11 {
-        let mut row_materials: Vec<Box<dyn Material>> = vec![];
+        let mut row_materials: Vec<Box<dyn Material + Sync>> = vec![];
         for _ in -11..11 {
             let choose_material = rand::random::<f64>();
             if choose_material < 0.8 {
@@ -146,20 +143,35 @@ fn main() {
     output += &format!("{} {}\n", image_width, image_height);
     output += "255\n";
 
-    for j in (0..image_height).rev() {
-        eprint!("\r\x1b[KScanlines remaining: {}", j);
-        for i in 0..image_width {
-            let mut pixel_color = Color::zero();
-            for _ in 0..samples_per_pixel {
-                let u = (i as f64 + rand::random::<f64>()) / ((image_width - 1) as f64);
-                let v = (j as f64 + rand::random::<f64>()) / ((image_height - 1) as f64);
-                let ray = camera.get_ray(u, v);
-                pixel_color += ray_color(&ray, &world, max_depth);
+    let pixels_total = image_width * image_height;
+    let pixels_so_far = atomic::AtomicI32::new(0);
+    output += &(0..image_height)
+        .into_par_iter()
+        .rev()
+        .map(|j| -> String {
+            let mut result = String::new();
+            for i in 0..image_width {
+                if rayon::current_thread_index() == Some(0) {
+                    let percentage = pixels_so_far.load(atomic::Ordering::Relaxed) as f64
+                        / (pixels_total as f64)
+                        * 100.0;
+                    eprint!("\r\x1b[KProgess: {:.2}%", percentage);
+                }
+
+                let mut pixel_color = Color::zero();
+                for _ in 0..samples_per_pixel {
+                    let u = (i as f64 + rand::random::<f64>()) / ((image_width - 1) as f64);
+                    let v = (j as f64 + rand::random::<f64>()) / ((image_height - 1) as f64);
+                    let ray = camera.get_ray(u, v);
+                    pixel_color += ray_color(&ray, &world, max_depth);
+                }
+                result += &format!("{}\n", output_color(&pixel_color, samples_per_pixel));
+                pixels_so_far.fetch_add(1, atomic::Ordering::Relaxed);
             }
-            output += &format!("{}\n", output_color(&pixel_color, samples_per_pixel));
-        }
-    }
-    eprintln!("\nDone.");
+            result
+        })
+        .collect::<String>();
+    eprintln!("\r\x1b[KDone.");
 
     print!("{}", output);
 }

@@ -3,7 +3,7 @@ use super::hittable::Hittable;
 use super::ray::Ray;
 
 pub struct HittableList<'a> {
-    objects: Vec<Box<dyn Hittable + 'a>>,
+    objects: Vec<Box<dyn Hittable + Sync + 'a>>,
 }
 
 impl<'a> HittableList<'a> {
@@ -13,7 +13,7 @@ impl<'a> HittableList<'a> {
         }
     }
 
-    pub fn add(&mut self, object: impl Hittable + 'a) {
+    pub fn add(&mut self, object: impl Hittable + Sync + 'a) {
         self.objects.push(Box::new(object));
     }
 }

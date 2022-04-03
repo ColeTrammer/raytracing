@@ -7,11 +7,11 @@ use super::vec3::Point3;
 pub struct Sphere<'a> {
     center: Point3,
     radius: f64,
-    material: &'a (dyn Material + 'a),
+    material: &'a (dyn Material + Sync + 'a),
 }
 
 impl<'a> Sphere<'a> {
-    pub fn new(center: Point3, radius: f64, material: &'a (dyn Material + 'a)) -> Self {
+    pub fn new(center: Point3, radius: f64, material: &'a (dyn Material + Sync + 'a)) -> Self {
         Sphere {
             center,
             radius,
